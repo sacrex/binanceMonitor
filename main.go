@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/adshao/go-binance/v2"
+	binanceFuture "github.com/adshao/go-binance/v2/futures"
 	"github.com/crazygit/binance-market-monitor/helper"
 	l "github.com/crazygit/binance-market-monitor/helper/log"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -89,14 +91,22 @@ func getDifference(newValue, oldValue float64, suffix string) string {
 	if diff > 0 {
 		direction = "🔺"
 	}
-	return fmt.Sprintf("(%s%.2f%s)", direction, math.Abs(diff), suffix)
+	return fmt.Sprintf("(%s%.6f%s)", direction, math.Abs(diff), suffix)
+}
+
+func PercentStringify(PriceChangePercent float64, suffix string) string {
+	direction := "🔻"
+	if PriceChangePercent > 0 {
+		direction = "🔺"
+	}
+	return fmt.Sprintf("%s%.6f%s", direction, math.Abs(PriceChangePercent), suffix)
 }
 
 func prettyFloatString(value string) string {
 	if p, err := strconv.ParseFloat(value, 64); err != nil {
 		return value
 	} else {
-		return fmt.Sprintf("%.2f", p)
+		return fmt.Sprintf("%.6f", p)
 	}
 }
 
@@ -104,12 +114,12 @@ func isNeedAlert(newEvent ExtendWsMarketStatEvent) bool {
 	if oldEvent, ok := lastAlert[newEvent.Symbol]; ok {
 		priceChangePercent := math.Abs(newEvent.PriceChangePercentFloat - oldEvent.PriceChangePercentFloat)
 		duration := newEvent.Time - oldEvent.Time
-		if duration > alertDurationMilli {
-			if newEvent.LastPriceFloat <= 1 && priceChangePercent >= 50 {
+		if duration >= alertDurationMilli {
+			if newEvent.LastPriceFloat <= 1 && priceChangePercent >= 3 {
 				return true
-			} else if newEvent.LastPriceFloat >= 300 && priceChangePercent >= 6 {
+			} else if newEvent.LastPriceFloat >= 300 && priceChangePercent >= 3 {
 				return true
-			} else if newEvent.LastPriceFloat > 1 && newEvent.LastPriceFloat >= 300 && priceChangePercent >= 15 {
+			} else if newEvent.LastPriceFloat > 1 && newEvent.LastPriceFloat >= 300 && priceChangePercent >= 3 {
 				return true
 			}
 		}
@@ -176,18 +186,91 @@ func errHandler(err error) {
 	log.Error(err)
 }
 
+var wsKlineText = `
+*事件时间*: %s
+*类型*: 5分钟的涨跌幅超过3%%
+*交易对*: %s
+*开盘价*: %s
+*收盘价*: %s
+*差\(收盘\-开盘\)*: %s
+*涨/跌幅*: %s
+*开始时间*: %s
+*结束时间*: %s
+`
+
+func wsKlineHandler(event *binanceFuture.WsKlineEvent) {
+	var postMessageTextBuilder strings.Builder
+	var postMessage = false
+	//log.WithFields(logrus.Fields{"Symbol": event.Symbol, "Price": event.Kline.Close,
+	//	"Time": time.UnixMilli(event.Time).Format(time.DateTime)}).Info("Stats")
+
+	closePrice, _ := strconv.ParseFloat(event.Kline.Close, 64)
+	openPrice, _ := strconv.ParseFloat(event.Kline.Open, 64)
+
+	PriceChangePercent := (closePrice - openPrice) / openPrice
+	if math.Abs(PriceChangePercent) >= 0.03 {
+		postMessageTextBuilder.WriteString(fmt.Sprintf(wsKlineText,
+			escapeTextToMarkdownV2(time.UnixMilli(event.Time).Format(time.DateTime)),
+			escapeTextToMarkdownV2(event.Symbol),
+			escapeTextToMarkdownV2(event.Kline.Open),
+			escapeTextToMarkdownV2(event.Kline.Close),
+			escapeTextToMarkdownV2(getDifference(closePrice, openPrice, "")),
+			escapeTextToMarkdownV2(PercentStringify(PriceChangePercent*100, "%")),
+			escapeTextToMarkdownV2(time.UnixMilli(event.Kline.StartTime).Format(time.DateTime)),
+			escapeTextToMarkdownV2(time.UnixMilli(event.Kline.EndTime).Format(time.DateTime)),
+		))
+		postMessage = true
+	}
+
+	if postMessage {
+		if err := PostMessageToTgChannel(getTelegramChannelName(), postMessageTextBuilder.String()); err != nil {
+			log.WithField("Error", err).Error("Post message to tg channel failed")
+		}
+	}
+}
+
+func errWsKlineHandler(err error) {
+	log.Error(err)
+}
+
 func init() {
-	binance.WebsocketKeepalive = true
+	binanceFuture.WebsocketKeepalive = true
 }
 
 func main() {
-	for {
-		log.Info("Connect to binance...")
-		doneC, _, err := binance.WsAllMarketsStatServe(eventHandler, errHandler)
-		if err != nil {
-			log.Error(err)
-			continue
-		}
-		<-doneC
+	exchangeInfo, err := binanceFuture.NewClient("", "").NewExchangeInfoService().Do(context.Background())
+	if err != nil {
+		log.WithField("Error", err).Error("Get ExchangeInfo failed")
+		return
 	}
+
+	pairs := make([]map[string]string, 3)
+	for i, v := range exchangeInfo.Symbols {
+		if v.QuoteAsset == "USDT" {
+			i = i % 3
+			if pairs[i] == nil {
+				pairs[i] = make(map[string]string)
+			}
+			pairs[i][v.Pair] = "5m"
+		}
+	}
+
+	log.WithField("Count", len(exchangeInfo.Symbols)).Info("Symbols")
+
+	for _, v := range pairs {
+		go func(p map[string]string) {
+			for {
+				doneC, _, err := binanceFuture.WsCombinedKlineServe(p, wsKlineHandler, errWsKlineHandler)
+				if err != nil {
+					log.WithField("Error", err).Error("Read Kline")
+					time.Sleep(5 * time.Second)
+					continue
+				}
+				<-doneC
+			}
+		}(v)
+		time.Sleep(time.Second)
+	}
+	c := make(chan struct{})
+	<-c
 }

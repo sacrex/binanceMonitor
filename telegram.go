@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/crazygit/binance-market-monitor/helper"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"strconv"
 )
 
 var tgBot *tgbotapi.BotAPI
@@ -22,6 +23,7 @@ func PostMessageToTgChannel(username, text string) error {
 	msg := tgbotapi.NewMessageToChannel(username, text)
 	msg.ParseMode = tgbotapi.ModeMarkdownV2
 	msg.DisableWebPagePreview = true
+	msg.ChatID, _ = strconv.ParseInt(helper.GetRequiredStringEnv("TELEGRAM_CHAT_ID"), 10, 64)
 	if helper.IsProductionEnvironment() {
 		response, err := tgBot.Send(msg)
 		log.WithField("response", response).Info("Post returned message")

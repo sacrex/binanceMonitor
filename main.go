@@ -95,9 +95,9 @@ func getDifference(newValue, oldValue float64, suffix string) string {
 }
 
 func PercentStringify(PriceChangePercent float64, suffix string) string {
-	direction := "🔻"
+	direction := "😭"
 	if PriceChangePercent > 0 {
-		direction = "🔺"
+		direction = "🚀"
 	}
 	return fmt.Sprintf("%s%.6f%s", direction, math.Abs(PriceChangePercent), suffix)
 }
@@ -198,6 +198,9 @@ var wsKlineText = `
 *结束时间*: %s
 `
 
+// BTCUSDT -> 176342342424 表示最后一次发送的交易对时间
+var latestPairsTime map[string]int64
+
 func wsKlineHandler(event *binanceFuture.WsKlineEvent) {
 	var postMessageTextBuilder strings.Builder
 	var postMessage = false
@@ -220,6 +223,16 @@ func wsKlineHandler(event *binanceFuture.WsKlineEvent) {
 			escapeTextToMarkdownV2(time.UnixMilli(event.Kline.EndTime).Format(time.DateTime)),
 		))
 		postMessage = true
+	}
+
+	//判断该事件是不是需要频繁发送，若在20s内已经发送过了，就不发送
+	if postMessage {
+		lastSendTime := latestPairsTime[event.Symbol]
+		if lastSendTime == 0 || time.Now().Unix()-lastSendTime >= 20 {
+			latestPairsTime[event.Symbol] = time.Now().Unix()
+		} else {
+			postMessage = false
+		}
 	}
 
 	if postMessage {
@@ -257,6 +270,7 @@ func main() {
 
 	log.WithField("Count", len(exchangeInfo.Symbols)).Info("Symbols")
 
+	latestPairsTime = make(map[string]int64)
 	for _, v := range pairs {
 		go func(p map[string]string) {
 			for {

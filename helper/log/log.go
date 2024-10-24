@@ -18,7 +18,12 @@ func init() {
 
 	envArr := strings.Split(string(bytes), "\r\n")
 	for _, item := range envArr {
+		item = strings.TrimSpace(item)
+		if len(item) < 1 || strings.HasPrefix(item, "#") {
+			continue
+		}
 		kv := strings.Split(item, "=")
+		log.WithField("env", kv).Info("Info")
 		if len(kv) == 2 {
 			err = os.Setenv(kv[0], kv[1])
 		}

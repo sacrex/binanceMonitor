@@ -1,4 +1,5 @@
 # 币安市场行情监控
+基于 https://github.com/crazygit/binance-market-monitor
 
 ## 触发报警的条件
 

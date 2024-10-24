@@ -85,10 +85,10 @@ func wsKlineHandler(event *binanceFuture.WsKlineEvent) {
 		postMessage = true
 	}
 
-	//判断该事件是不是需要频繁发送，若在20s内已经发送过了，就不发送
+	//判断该事件是不是需要频繁发送，若在60s内已经发送过了，就不发送
 	if postMessage {
 		lastSendTime := latestPairsTime[event.Symbol]
-		if lastSendTime == 0 || time.Now().Unix()-lastSendTime >= 20 {
+		if lastSendTime == 0 || time.Now().Unix()-lastSendTime >= 60 {
 			latestPairsTime[event.Symbol] = time.Now().Unix()
 		} else {
 			postMessage = false

@@ -6,6 +6,7 @@ import (
 	binanceFuture "github.com/adshao/go-binance/v2/futures"
 	"github.com/crazygit/binance-market-monitor/helper"
 	l "github.com/crazygit/binance-market-monitor/helper/log"
+	"github.com/crazygit/binance-market-monitor/misc"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"math"
 	"strconv"
@@ -49,6 +50,7 @@ var wsKlineText = `
 *涨/跌幅*: %s
 *事件时间*: %s
 *类型*: 5分钟的涨跌幅超过%s%%
+*版块*: %s
 *开盘价*: %s
 *收盘价*: %s
 *差\(收盘\-开盘\)*: %s
@@ -59,11 +61,19 @@ var wsKlineText = `
 // BTCUSDT -> 176342342424 表示最后一次发送的交易对时间
 var latestPairsTime map[string]int64
 
+// symbolsToTags 获取符号的标签
+var symbolsToTags map[string][]string
+
 func wsKlineHandler(event *binanceFuture.WsKlineEvent) {
 	var postMessageTextBuilder strings.Builder
 	var postMessage = false
 	//log.WithFields(logrus.Fields{"Symbol": event.Symbol, "Price": event.Kline.Close,
 	//	"Time": time.UnixMilli(event.Time).Format(time.DateTime)}).Info("Stats")
+
+	tags := "-"
+	if len(symbolsToTags[event.Symbol]) > 0 {
+		tags = strings.Join(symbolsToTags[event.Symbol], " ")
+	}
 
 	closePrice, _ := strconv.ParseFloat(event.Kline.Close, 64)
 	openPrice, _ := strconv.ParseFloat(event.Kline.Open, 64)
@@ -76,6 +86,8 @@ func wsKlineHandler(event *binanceFuture.WsKlineEvent) {
 			escapeTextToMarkdownV2(time.UnixMilli(event.Time).Format(time.DateTime)),
 
 			escapeTextToMarkdownV2("2.5"),
+
+			escapeTextToMarkdownV2(tags),
 
 			escapeTextToMarkdownV2(event.Kline.Open),
 			escapeTextToMarkdownV2(event.Kline.Close),
@@ -117,6 +129,16 @@ func main() {
 	if err != nil {
 		log.WithField("Error", err).Error("Get ExchangeInfo failed")
 		return
+	}
+
+	symbolsToTags = make(map[string][]string)
+	oldSymbolsToTags, err := misc.GetTags()
+	if err != nil {
+		log.WithField("error", err).Error("misc.GetTags")
+		return
+	}
+	for k, v := range oldSymbolsToTags {
+		symbolsToTags[k+"USDT"] = v
 	}
 
 	pairs := make([]map[string]string, 3)

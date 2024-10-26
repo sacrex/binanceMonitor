@@ -48,7 +48,7 @@ var wsKlineText = `
 *交易对*: %s
 *涨/跌幅*: %s
 *事件时间*: %s
-*类型*: 15分钟的涨跌幅超过3%%
+*类型*: 5分钟的涨跌幅超过%s%%
 *开盘价*: %s
 *收盘价*: %s
 *差\(收盘\-开盘\)*: %s
@@ -69,11 +69,13 @@ func wsKlineHandler(event *binanceFuture.WsKlineEvent) {
 	openPrice, _ := strconv.ParseFloat(event.Kline.Open, 64)
 
 	PriceChangePercent := (closePrice - openPrice) / openPrice
-	if math.Abs(PriceChangePercent) >= 0.03 {
+	if math.Abs(PriceChangePercent) >= 0.025 {
 		postMessageTextBuilder.WriteString(fmt.Sprintf(wsKlineText,
 			escapeTextToMarkdownV2(event.Symbol),
 			escapeTextToMarkdownV2(PercentStringify(PriceChangePercent*100, "%")),
 			escapeTextToMarkdownV2(time.UnixMilli(event.Time).Format(time.DateTime)),
+
+			escapeTextToMarkdownV2("2.5"),
 
 			escapeTextToMarkdownV2(event.Kline.Open),
 			escapeTextToMarkdownV2(event.Kline.Close),
@@ -124,7 +126,7 @@ func main() {
 			if pairs[i] == nil {
 				pairs[i] = make(map[string]string)
 			}
-			pairs[i][v.Pair] = "15m"
+			pairs[i][v.Pair] = "5m"
 		}
 	}
 

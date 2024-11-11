@@ -230,7 +230,7 @@ func getKline(symbol, interval string, cnt int) (res []*binanceFuture.Kline, err
 	return
 }
 
-// 二号策略：查看5m的级别，若连续三个都是上涨，或者15m内上涨超过3.5个点，报警
+// 策略2：查看5m的级别，若连续三个都是上涨，或者15m内上涨超过4个点，报警
 func strategy2(pairs []string, grpCnt int) {
 	// 表示每组个数
 	if grpCnt == 0 {

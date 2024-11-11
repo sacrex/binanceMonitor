@@ -68,9 +68,6 @@ func strategy2Handler(symbol string, up1, up2, up3 float64, up string) {
 	var postMessageTextBuilder strings.Builder
 
 	v1, v2, v3 := PercentStringify(up1, "%"), PercentStringify(up2, "%"), PercentStringify(up3, "%")
-	if up1 < 0 || up2 < 0 || up3 < 0 {
-		v1, v2, v3 = "-%", "-%", "-%"
-	}
 
 	postMessageTextBuilder.WriteString(fmt.Sprintf(strategy2Text,
 		escapeTextToMarkdownV2(symbol),

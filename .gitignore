@@ -2,3 +2,4 @@ vendor/
 .env
 monitor.exe
 release/
+.idea
